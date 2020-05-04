@@ -1,0 +1,281 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block content %}
+    <script type='text/javascript'>
+        var listings = {{ listings_json|safe }};
+        {% if request.user.is_authenticated %}
+            var orders = {{ order_json|safe }};
+        {% endif %}
+    </script>
+
+    <div id="app" class="max-w-5xl mx-auto px-4">
+        <div class="my-32"><h1 class="font-bold text-5xl text-center">SRHS Book Exchange 📚</h1></div>
+
+        {% if orders and request.user.is_authenticated %}
+            <div class="mb-24">
+                <h2 class="font-semibold text-xl mb-4">Pending orders</h2>
+                <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-3 gap-4">
+                    {% for item in orders %}
+                        <text-card v-on:mark="mark({{ item.pk }})" title="{{ item.name|title }}"
+                                   subtitle="({{ item.phone|slice:'0:3' }}) {{ item.phone|slice:'3:6' }}-{{ item.phone|slice:'6:10' }}"
+                                   description="
+
+
+                                           {% for object in item.items.values %}{{ object.title|truncatechars:32 }} {% endfor %}"></text-card>
+                    {% endfor %}
+                </div>
+            </div>
+        {% endif %}
+
+        <!-- main listing grid -->
+        <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 mb-24">
+            <img-card v-for="(listing, index) in listings" v-bind:key="index.toString()"
+                      v-on:add-cart="addCart(index.toString())"
+                      v-on:remove-cart="removeCart(index.toString())"
+                      :cart="cart.includes(index.toString())" :title="listing.fields.title"
+                      :subtitle="listing.fields.course"
+                      :description="listing.fields.description" :image="'media/' + listing.fields.thumbnail"></img-card>
+        </div>
+
+        <!--cart and button-->
+        <div class="select-none ">
+            <div v-show="cart.length > 0"
+                 class="rounded-full h-10 w-10 cursor-default bg-red-600 border-4 z-50 shadow-lg border-white mx-auto text-center pt-1 font-semibold text-white"
+                 style="position: fixed; bottom:80px; right:90px;">[[% cart.length %]]
+            </div>
+            <a href="#" v-on:click="modal=true"
+               class="float p-5 z-40 rounded-full shadow-outline text-white shadow-2xl bg-blue-500 hover:bg-blue-400 transition-all duration-150"
+               style="position: fixed; bottom:40px; right:40px;">
+                <svg class="inline-block stroke-current" width="32" height="32" viewBox="0 0 24 24" fill="none"
+                     xmlns="http://www.w3.org/2000/svg">
+                    <path d="M3 3H5L5.4 5M7 13H17L21 5H5.4M7 13L5.4 5M7 13L4.70711 15.2929C4.07714 15.9229 4.52331 17 5.41421 17H17M17 17C15.8954 17 15 17.8954 15 19C15 20.1046 15.8954 21 17 21C18.1046 21 19 20.1046 19 19C19 17.8954 18.1046 17 17 17ZM9 19C9 20.1046 8.10457 21 7 21C5.89543 21 5 20.1046 5 19C5 17.8954 5.89543 17 7 17C8.10457 17 9 17.8954 9 19Z"
+                          stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+            </a>
+        </div>
+        <div v-show="modal"
+             class="fixed bottom-0 z-50 inset-x-0 px-4 pb-6 sm:inset-0 sm:p-0 sm:flex sm:items-center sm:justify-center">
+            <!--
+              Background overlay, show/hide based on modal state.
+
+              Entering: "ease-out duration-300"
+                From: "opacity-0"
+                To: "opacity-100"
+              Leaving: "ease-in duration-200"
+                From: "opacity-100"
+                To: "opacity-0"
+            -->
+            <transition
+                    enter-active-class="transition ease-out duration-300"
+                    enter-class="opacity-0"
+                    enter-to-class="opacity-100"
+                    leave-active-class="transition ease-in duration-200"
+                    leave-class="opacity-100"
+                    leave-to-class="opacity-0"
+            >
+                <div v-show="modal" class="fixed inset-0 transition-opacity">
+                    <div class="absolute inset-0 bg-gray-500 opacity-75"></div>
+                </div>
+            </transition>
+
+            <!--
+              Modal panel, show/hide based on modal state.
+
+              Entering: "ease-out duration-300"
+                From: "opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
+                To: "opacity-100 translate-y-0 sm:scale-100"
+              Leaving: "ease-in duration-200"
+                From: "opacity-100 translate-y-0 sm:scale-100"
+                To: "opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
+            -->
+            <transition
+                    enter-active-class="transition ease-out duration-300"
+                    enter-class="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
+                    enter-to-class="opacity-100 translate-y-0 sm:scale-100"
+                    leave-active-class="transition ease-in duration-200"
+                    leave-class="opacity-100 translate-y-0 sm:scale-100"
+                    leave-to-class="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
+            >
+                <div v-show="modal"
+                     class="bg-white rounded-lg px-4 pt-5 pb-4 overflow-hidden shadow-xl transform transition-all sm:max-w-lg sm:w-full sm:p-6">
+                    <div>
+                        <div class="text-left mt-2 sm:mt-2">
+                            <h3 class="text-lg mb-4 leading-6 font-medium text-gray-900">
+                                Your Cart
+                            </h3>
+                            <div class="border rounded-md my-4 overflow-y-scroll sm:h-auto cartBox">
+                                <h1 v-if="cart.length == 0" class="text-center text-gray-400 bg-white p-4">Your cart is
+                                    el empty.</h1>
+                                <div v-if="cart.length > 0">
+                                    <div v-for="item in this.cart"
+                                         :class="{'border-b': cart.length > 1, 'border-b-0': cart.slice(-1)[0] == item }"
+                                         class="px-4 py-2 w-full mx-4 mx-auto">
+                                        <h2 class="font-semibold">[[% listings[item]['fields']['title'] %]]</h2>
+                                        <h3 class="text-gray-500 text-sm">[[% listings[item]['fields']['course']
+                                            %]]</h3>
+                                    </div>
+                                </div>
+                            </div>
+                            <hr class="my-2">
+                            <div class="mb-6">
+                                <h3 class="text-lg leading-6 font-medium text-gray-900 mt-6">
+                                    Checkout
+                                </h3>
+                                <div class="mt-2">
+                                    <p class="text-sm leading-5 text-gray-500">
+                                        Once you checkout, the seller will contact you to complete your order.
+                                    </p>
+                                </div>
+                                <div class="mb-4 mt-4">
+                                    <label for="email" class="block text-sm font-medium mb-1 leading-5 text-gray-700">Full
+                                        Name</label>
+                                    <input placeholder="Robert Perry" v-model="cartName"
+                                           class="border border-gray-300 p-2 w-full text-gray-700 rounded-md outline-none focus:shadow-outline transition-all duration-150"/>
+                                </div>
+                                <div class="relative">
+                                    <label for="email" class="block text-sm font-medium mb-1 leading-5 text-gray-700">Phone
+                                        Number</label>
+                                    <input placeholder="(555) 987-6543" type="tel" pattern="[0-9]{3}-[0-9]{3}-[0-9]{4}"
+                                           v-model="cartTel"
+                                           required
+                                           class="border border-gray-300 p-2 w-full text-gray-700 rounded-md outline-none focus:shadow-outline transition-all duration-150"/>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mt-5 sm:mt-6 sm:grid sm:grid-cols-2 sm:gap-3 sm:grid-flow-row-dense">
+          <span class="flex w-full rounded-md shadow-sm sm:col-start-2">
+            <button type="button"
+                    v-show="cart.length < 1 || cartName === '' || cartTel.length < 10 || cartTel.length > 10"
+                    class="inline-flex justify-center w-full rounded-md border border-transparent px-4 py-2 text-base leading-6 sm:text-sm sm:leading-5 font-medium bg-gray-300 text-gray-500 cursor-not-alloweds"
+                    disabled
+            >
+              Submit
+            </button>
+            <button v-on:click="checkout()" type="button" v-show="cart.length > 0 && cartName && cartTel.length === 10"
+                    class="inline-flex justify-center w-full bg-blue-500 rounded-md border border-transparent px-4 py-2 text-base leading-6 sm:text-sm sm:leading-5 shadow-sm hover:bg-blue-500 focus:outline-none focus:border-blue-700 focus:shadow-outline-blue transition ease-in-out duration-150 text-white">
+              Submit
+            </button>
+          </span>
+                        <span class="mt-3 flex w-full rounded-md shadow-sm sm:mt-0 sm:col-start-1">
+            <button type="button" v-on:click="modal=false"
+                    class="inline-flex justify-center w-full rounded-md border border-gray-300 px-4 py-2 bg-white text-base leading-6 font-medium text-gray-700 shadow-sm hover:text-gray-500 focus:outline-none focus:border-blue-300 focus:shadow-outline transition ease-in-out duration-150 sm:text-sm sm:leading-5">
+              Cancel
+            </button>
+          </span>
+                    </div>
+                </div>
+            </transition>
+        </div>
+
+        <!--success modal -->
+        <success-modal v-if="successModal == true" title="Order Successfully Sent"
+                       description="The seller will contact you soon to complete your purchase. Thanks for using SRHS Book Exchange!"
+                       v-on:clicked="successModal=false"></success-modal>
+    </div>
+
+    <!-- development version, includes helpful console warnings -->
+    <script src="https://cdn.jsdelivr.net/npm/vue/dist/vue.js"></script>
+    <script src="{% static 'components.js' %}"></script>
+    <script>
+        axios.defaults.xsrfCookieName = 'csrftoken'
+        axios.defaults.xsrfHeaderName = "X-CSRFTOKEN"
+    </script>
+    <script>
+        var app = new Vue({
+            delimiters: ['[[%', '%]]'],
+            el: '#app',
+            data: {
+                listings: listings,
+                {% if request.user.is_authenticated %}
+                    orders: orders,{% endif %}
+                modal: false,
+                cart: [],
+                cartName: '',
+                cartTel: '',
+                submitEnabled: false,
+                successModal: false
+
+            },
+            beforeMount() {
+                var reloading = sessionStorage.getItem("reloading");
+                if (reloading) {
+                    sessionStorage.removeItem("reloading");
+                    this.successModal = true;
+                }
+            },
+            mounted() {
+                if (localStorage.cart) {
+                    if (localStorage.cart.length < 2) {
+                        this.cart = [localStorage.cart];
+                    } else {
+                        this.cart = localStorage.cart.split(',');
+                    }
+                }
+            },
+            watch: {
+                cart(newCart) {
+                    localStorage.cart = [newCart];
+                }
+            },
+            methods: {
+                addCart: function (itemNumber) {
+                    this.cart.push(itemNumber);
+                },
+                removeCart: function (itemNumber) {
+                    const index = this.cart.indexOf(itemNumber);
+                    if (index > -1) {
+                        this.cart.splice(index, 1);
+                    }
+                },
+                checkout: function () {
+                    var cartPK = [];
+
+                    for (item in this.cart) {
+                        itemPk = listings[item].pk;
+                        cartPK.push(itemPk);
+                    }
+
+                    axios.post('/', {
+                        action: 'checkout',
+                        name: this.cartName,
+                        phone: this.cartTel,
+                        items: cartPK
+                    })
+                        .then(function (response) {
+                            localStorage.clear()
+                            sessionStorage.setItem("reloading", "true")
+                            document.location.reload()
+
+                        })
+                        .catch(function (error) {
+                            alert("Sorry, something went wrong. Refresh the page and try again." + error)
+                        });
+
+                },
+                mark: function (pk) {
+                    axios.post('/', {
+                        action: 'mark',
+                        pk: pk
+                    })
+                        .then(function (response) {
+                            document.location.reload()
+
+                        })
+                        .catch(function (error) {
+                            alert("Sorry, something went wrong. Refresh the page and try again." + error)
+                        });
+
+                }
+            }
+        });
+    </script>
+
+    <style>
+        @media only screen and (max-width: 640px) {
+            .cartBox {
+                max-height: 150px;
+            }
+        }
+    </style>
+{% endblock %}
